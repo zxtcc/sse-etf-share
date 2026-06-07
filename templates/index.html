@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>上交所 ETF 份额查询</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f7fb;
+        --panel: #ffffff;
+        --text: #1f2937;
+        --muted: #6b7280;
+        --line: #d8dde8;
+        --brand: #b91c1c;
+        --brand-dark: #8f1616;
+        --ok: #0f766e;
+        --error: #b91c1c;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Microsoft YaHei", sans-serif;
+      }
+
+      main {
+        width: min(1040px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 42px 0;
+      }
+
+      header {
+        margin-bottom: 22px;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 30px;
+        font-weight: 700;
+      }
+
+      h2 {
+        margin: 0 0 18px;
+        font-size: 20px;
+      }
+
+      .subtitle {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.7;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 18px;
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 24px;
+      }
+
+      form {
+        display: grid;
+        grid-template-columns: minmax(160px, 1fr) minmax(180px, 1fr) auto;
+        gap: 16px;
+        align-items: end;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 8px;
+        color: #374151;
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      input {
+        width: 100%;
+        height: 42px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 0 12px;
+        color: var(--text);
+        font-size: 15px;
+        background: #fff;
+      }
+
+      input:focus {
+        border-color: var(--brand);
+        outline: 3px solid rgba(185, 28, 28, 0.12);
+      }
+
+      button {
+        height: 42px;
+        border: 0;
+        border-radius: 6px;
+        padding: 0 22px;
+        background: var(--brand);
+        color: white;
+        font-size: 15px;
+        font-weight: 700;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      button:hover {
+        background: var(--brand-dark);
+      }
+
+      button:disabled {
+        cursor: wait;
+        opacity: 0.72;
+      }
+
+      .message {
+        display: none;
+        margin-top: 18px;
+        padding: 12px 14px;
+        border-radius: 6px;
+        line-height: 1.6;
+      }
+
+      .message.show {
+        display: block;
+      }
+
+      .message.error {
+        background: #fef2f2;
+        color: var(--error);
+      }
+
+      .message.info {
+        background: #ecfdf5;
+        color: var(--ok);
+      }
+
+      .result {
+        display: none;
+        margin-top: 22px;
+        border-top: 1px solid var(--line);
+        padding-top: 22px;
+      }
+
+      .result.show {
+        display: block;
+      }
+
+      .result-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .field {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 14px;
+        background: #fbfcff;
+      }
+
+      .field span {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .field strong {
+        font-size: 18px;
+        line-height: 1.35;
+        word-break: break-word;
+      }
+
+      .source {
+        margin-top: 18px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .source a {
+        color: var(--brand);
+      }
+
+      @media (max-width: 760px) {
+        main {
+          padding: 28px 0;
+        }
+
+        form,
+        .result-grid {
+          grid-template-columns: 1fr;
+        }
+
+        button {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>上交所 ETF 份额查询</h1>
+        <p class="subtitle">查询和汇总上海证券交易所披露的 ETF 当日清算后总份额。</p>
+      </header>
+
+      <div class="layout">
+        <section class="panel">
+          <h2>单日份额查询</h2>
+          <form id="queryForm">
+            <div>
+              <label for="code">ETF 代码</label>
+              <input id="code" name="code" inputmode="numeric" maxlength="6" placeholder="例如 510050" required>
+            </div>
+            <div>
+              <label for="date">查询日期</label>
+              <input id="date" name="date" type="date" required>
+            </div>
+            <button id="submitBtn" type="submit">查询</button>
+          </form>
+
+          <div id="message" class="message"></div>
+
+          <div id="result" class="result">
+            <div class="result-grid">
+              <div class="field">
+                <span>基金代码</span>
+                <strong id="resultCode">-</strong>
+              </div>
+              <div class="field">
+                <span>日期</span>
+                <strong id="resultDate">-</strong>
+              </div>
+              <div class="field">
+                <span>总份额（万份）</span>
+                <strong id="volume10k">-</strong>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>数据汇总</h2>
+          <form id="updateForm">
+            <div>
+              <label for="start">起始日期</label>
+              <input id="start" name="start" type="date" value="{{ default_start_date }}" required>
+            </div>
+            <div>
+              <label for="end">终止日期</label>
+              <input id="end" name="end" type="date" value="{{ default_end_date }}" required>
+            </div>
+            <button id="updateBtn" type="submit">数据更新</button>
+          </form>
+
+          <div id="updateMessage" class="message"></div>
+          <div id="updateResult" class="result">
+            <div class="result-grid">
+              <div class="field">
+                <span>访问上交所日期数</span>
+                <strong id="fetchedDateCount">-</strong>
+              </div>
+              <div class="field">
+                <span>本地跳过日期数</span>
+                <strong id="skippedFullDateCount">-</strong>
+              </div>
+              <div class="field">
+                <span>保存记录数</span>
+                <strong id="savedRecordCount">-</strong>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <p class="source">
+        数据来源：
+        <a href="https://www.sse.com.cn/market/funddata/volumn/etfvolumn/" target="_blank" rel="noreferrer">
+          上海证券交易所 ETF规模
+        </a>
+      </p>
+    </main>
+
+    <script>
+      const queryForm = document.querySelector("#queryForm");
+      const updateForm = document.querySelector("#updateForm");
+      const message = document.querySelector("#message");
+      const updateMessage = document.querySelector("#updateMessage");
+      const result = document.querySelector("#result");
+      const updateResult = document.querySelector("#updateResult");
+      const submitBtn = document.querySelector("#submitBtn");
+      const updateBtn = document.querySelector("#updateBtn");
+
+      document.querySelector("#date").value = "{{ default_end_date }}";
+
+      function formatNumber(value) {
+        const number = Number(value);
+        if (!Number.isFinite(number)) {
+          return value || "-";
+        }
+        return new Intl.NumberFormat("zh-CN", {
+          maximumFractionDigits: 4,
+        }).format(number);
+      }
+
+      function showMessage(target, text, type = "error") {
+        target.textContent = text;
+        target.className = `message ${type} show`;
+      }
+
+      function clearMessage(target) {
+        target.textContent = "";
+        target.className = "message";
+      }
+
+      queryForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        clearMessage(message);
+        result.classList.remove("show");
+        submitBtn.disabled = true;
+        submitBtn.textContent = "查询中";
+
+        const payload = {
+          code: document.querySelector("#code").value.trim(),
+          date: document.querySelector("#date").value,
+        };
+
+        try {
+          const response = await fetch("/api/query", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const body = await response.json();
+
+          if (!response.ok || !body.success) {
+            showMessage(message, body.message || "查询失败，请稍后重试。");
+            return;
+          }
+
+          const data = body.data;
+          document.querySelector("#resultCode").textContent = data.code;
+          document.querySelector("#resultDate").textContent = data.stat_date;
+          document.querySelector("#volume10k").textContent = formatNumber(data.total_volume_10k);
+          result.classList.add("show");
+          showMessage(message, body.source === "local" ? "已从本地数据读取。" : "已从上交所查询并更新本地数据。", "info");
+        } catch (error) {
+          showMessage(message, "查询失败，请确认网络可访问上交所后重试。");
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.textContent = "查询";
+        }
+      });
+
+      updateForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        clearMessage(updateMessage);
+        updateResult.classList.remove("show");
+        updateBtn.disabled = true;
+        updateBtn.textContent = "更新中";
+
+        const payload = {
+          start: document.querySelector("#start").value,
+          end: document.querySelector("#end").value,
+        };
+
+        try {
+          const response = await fetch("/api/update", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const body = await response.json();
+
+          if (!response.ok || !body.success) {
+            showMessage(updateMessage, body.message || "更新失败，请稍后重试。");
+            return;
+          }
+
+          const summary = body.summary;
+          document.querySelector("#fetchedDateCount").textContent = formatNumber(summary.fetched_date_count);
+          document.querySelector("#skippedFullDateCount").textContent = formatNumber(summary.skipped_full_date_count);
+          document.querySelector("#savedRecordCount").textContent = formatNumber(summary.saved_record_count);
+          updateResult.classList.add("show");
+          showMessage(updateMessage, "数据更新完成。", "info");
+        } catch (error) {
+          showMessage(updateMessage, "更新失败，请确认网络可访问上交所后重试。");
+        } finally {
+          updateBtn.disabled = false;
+          updateBtn.textContent = "数据更新";
+        }
+      });
+    </script>
+  </body>
+</html>
