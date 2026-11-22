@@ -8,10 +8,12 @@ from typing import List
 from flask import Flask, jsonify, render_template, request
 
 import storage
-from sse_client import EtfShare, SseClientError, SseEtfClient, validate_date
+from sse_client import EtfShare, SseClientError, SseEtfClient, validate_code, validate_date
+from szse.views import blueprint as szse_blueprint
 
 
 app = Flask(__name__)
+app.register_blueprint(szse_blueprint)
 client = SseEtfClient()
 DEFAULT_START_DATE = "2023-01-01"
 REQUEST_PAUSE_RANGE = (0.15, 0.45)
@@ -24,6 +26,45 @@ def index():
         default_start_date=DEFAULT_START_DATE,
         default_end_date=latest_non_weekend_date().isoformat(),
     )
+
+
+@app.get("/api/catalog")
+def etf_catalog():
+    codes = storage.local_codes()
+    if request.args.get("details") == "1":
+        return jsonify({"codes": codes, "funds": storage.local_funds(codes)})
+    return jsonify({"codes": codes})
+
+
+@app.get("/api/favorites")
+def etf_favorites():
+    return jsonify({"favorites": list(storage.load_favorites().items())})
+
+
+@app.route("/api/favorites/<code>", methods=["PUT", "DELETE"])
+def change_etf_favorite(code):
+    try:
+        code = validate_code(code)
+        favorites = storage.set_favorite(code, request.method == "PUT")
+    except ValueError as exc:
+        return jsonify({"message": str(exc)}), 400
+    except FileNotFoundError:
+        return jsonify({"message": "本地基金清单中没有该基金。"}), 404
+    return jsonify({"favorites": list(favorites.items())})
+
+
+@app.get("/api/history")
+def etf_history():
+    code = request.args.get("code", "")
+    try:
+        start = validate_date(request.args.get("start", DEFAULT_START_DATE))
+        end = validate_date(request.args.get("end", latest_non_weekend_date().isoformat()))
+        if start > end:
+            raise ValueError("起始日期不能晚于终止日期")
+        records = storage.load_history(code, start, end)
+    except ValueError as exc:
+        return jsonify({"success": False, "message": str(exc)}), 400
+    return jsonify({"success": True, "data": records})
 
 
 @app.post("/api/query")

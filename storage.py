@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from pathlib import Path
+from tempfile import NamedTemporaryFile
+from threading import Lock
 from typing import Dict, Iterable, List, Optional
 
 from openpyxl import Workbook, load_workbook
@@ -12,8 +14,12 @@ from openpyxl import Workbook, load_workbook
 from sse_client import EtfShare, validate_code, validate_date
 
 
-DATA_DIR = Path("data")
+DATA_DIR = Path(__file__).resolve().parent / "data"
 STATUS_FILE = DATA_DIR / "_update_status.json"
+CATALOG_FILENAME = "_fund_catalog.json"
+FAVORITES_FILENAME = "_favorites.json"
+_catalog_lock = Lock()
+_favorites_lock = Lock()
 HEADERS = [
     "日期",
     "ETF代码",
@@ -55,13 +61,101 @@ def save_shares(shares: Iterable[EtfShare]) -> int:
         grouped.setdefault(share.code, []).append(share)
 
     saved = 0
+    names = {}
     for code, code_shares in grouped.items():
         records = _load_records(code)
         for share in code_shares:
             records[share.stat_date] = _share_to_record(share)
             saved += 1
         _write_records(code, records)
+        for day in sorted(records, reverse=True):
+            record = records[day]
+            name = str(record.get("基金名称") or record.get("基金简称") or "").strip()
+            if name:
+                names[code] = name
+                break
+    if names:
+        _save_catalog_names(names)
     return saved
+
+
+def local_codes() -> List[str]:
+    """列出本地 ETF 工作簿的代码。"""
+    return sorted(
+        path.stem for path in DATA_DIR.glob("[0-9]" * 6 + ".xlsx")
+        if path.is_file()
+    )
+
+
+def local_funds(codes: List[str]) -> List[Dict[str, str]]:
+    names = _load_catalog_names()
+    return [{"code": code, "name": names.get(code, "")} for code in codes]
+
+
+def _load_catalog_names() -> Dict[str, str]:
+    return _read_name_map(CATALOG_FILENAME)
+
+
+def _read_name_map(filename: str) -> Dict[str, str]:
+    try:
+        return json.loads((DATA_DIR / filename).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+
+
+def _save_catalog_names(updates: Dict[str, str]) -> None:
+    with _catalog_lock:
+        names = _load_catalog_names()
+        if all(names.get(code) == name for code, name in updates.items()):
+            return
+        names.update(updates)
+        _write_name_map(CATALOG_FILENAME, names)
+
+
+def _write_name_map(filename: str, names: Dict[str, str]) -> None:
+    ensure_data_dir()
+    with NamedTemporaryFile(mode="w", encoding="utf-8", dir=DATA_DIR, delete=False) as file:
+        temporary = Path(file.name)
+        try:
+            json.dump(names, file, ensure_ascii=False, indent=2)
+            file.write("\n")
+            file.close()
+            temporary.replace(DATA_DIR / filename)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+
+def load_favorites() -> Dict[str, str]:
+    return _read_name_map(FAVORITES_FILENAME)
+
+
+def set_favorite(code: str, enabled: bool) -> Dict[str, str]:
+    with _favorites_lock:
+        favorites = load_favorites()
+        if enabled:
+            if not etf_file_path(code).is_file():
+                raise FileNotFoundError(code)
+            favorites[code] = _load_catalog_names().get(code) or favorites.get(code, "")
+        else:
+            favorites.pop(code, None)
+        _write_name_map(FAVORITES_FILENAME, favorites)
+        return favorites
+
+
+def load_history(code: str, start: str, end: str) -> List[Dict[str, object]]:
+    """按日期升序返回份额，以及相对上一条本地记录的变化。"""
+    records = _load_records(code)
+    history = []
+    previous = None
+    for stat_date in sorted(records):
+        if stat_date > end:
+            break
+        share = _record_to_share(records[stat_date])
+        if stat_date >= start:
+            change = None if previous is None else share.total_volume_shares - previous
+            history.append({**share.to_dict(), "change_shares": change})
+        previous = share.total_volume_shares
+    return history
 
 
 def is_date_fully_updated(stat_date: str) -> bool:
