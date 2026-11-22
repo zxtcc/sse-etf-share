@@ -26,6 +26,28 @@ def index():
     )
 
 
+@app.get("/api/catalog")
+def etf_catalog():
+    codes = storage.local_codes()
+    if request.args.get("details") == "1":
+        return jsonify({"codes": codes, "funds": storage.local_funds(codes)})
+    return jsonify({"codes": codes})
+
+
+@app.get("/api/history")
+def etf_history():
+    code = request.args.get("code", "")
+    try:
+        start = validate_date(request.args.get("start", DEFAULT_START_DATE))
+        end = validate_date(request.args.get("end", latest_non_weekend_date().isoformat()))
+        if start > end:
+            raise ValueError("起始日期不能晚于终止日期")
+        records = storage.load_history(code, start, end)
+    except ValueError as exc:
+        return jsonify({"success": False, "message": str(exc)}), 400
+    return jsonify({"success": True, "data": records})
+
+
 @app.post("/api/query")
 def query_etf_share():
     payload = request.get_json(silent=True) or request.form

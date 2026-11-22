@@ -1,6 +1,8 @@
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
 import storage
 from sse_client import EtfShare
@@ -36,6 +38,18 @@ class StorageTest(unittest.TestCase):
         self.assertEqual(loaded.code, "510050")
         self.assertEqual(loaded.total_volume_10k, "5833506.68")
         self.assertTrue((storage.DATA_DIR / "510050.xlsx").exists())
+
+    def test_fund_catalog_uses_index_and_keeps_latest_name(self):
+        share = EtfShare("2025-09-04", "510050", "50ETF", "50ETF", "单市", "1", 10000)
+        storage.save_shares([share])
+        storage.save_shares([replace(share, stat_date="2025-09-05", name="上证50ETF")])
+        storage.save_shares([share])
+
+        with patch.object(storage, "load_workbook", side_effect=AssertionError("opened Excel")):
+            self.assertEqual(
+                storage.local_funds(storage.local_codes()),
+                [{"code": "510050", "name": "上证50ETF"}],
+            )
 
     def test_mark_date_fully_updated(self):
         self.assertFalse(storage.is_date_fully_updated("2025-09-04"))

@@ -3,19 +3,19 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>上交所 ETF 份额查询</title>
+    <title>上交所 ETF 份额查询与历史分析</title>
     <style>
       :root {
         color-scheme: light;
-        --bg: #f6f7fb;
+        --bg: #f4f6f9;
         --panel: #ffffff;
         --text: #1f2937;
         --muted: #6b7280;
         --line: #d8dde8;
-        --brand: #b91c1c;
-        --brand-dark: #8f1616;
+        --brand: #1f4e79;
+        --brand-dark: #163a5c;
         --ok: #0f766e;
-        --error: #b91c1c;
+        --error: #1f4e79;
       }
 
       * {
@@ -34,21 +34,22 @@
       main {
         width: min(1040px, calc(100% - 32px));
         margin: 0 auto;
-        padding: 42px 0;
+        padding: 24px 0 40px;
       }
 
       header {
-        margin-bottom: 22px;
+        background: var(--brand); color: white; padding: 20px max(16px, calc((100% - 1040px) / 2));
       }
 
       h1 {
         margin: 0 0 8px;
-        font-size: 30px;
+        font-size: 24px;
         font-weight: 700;
       }
 
       h2 {
         margin: 0 0 18px;
+        color: var(--brand);
         font-size: 20px;
       }
 
@@ -99,7 +100,7 @@
 
       input:focus {
         border-color: var(--brand);
-        outline: 3px solid rgba(185, 28, 28, 0.12);
+        outline: 3px solid rgba(31, 78, 121, 0.16);
       }
 
       button {
@@ -207,14 +208,36 @@
           width: 100%;
         }
       }
+      .panel { box-shadow: 0 1px 4px rgba(0, 0, 0, .06); }
+      .history-form { grid-template-columns: repeat(3, minmax(0, 1fr)) auto; }
+      .history-note { color: var(--muted); font-size: 13px; line-height: 1.6; }
+      .chart { display: block; width: 100%; height: auto; margin: 14px 0; }
+      .chart text { fill: var(--muted); font: 14px system-ui, sans-serif; }
+      .table-wrap { overflow-x: auto; }
+      table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+      th, td { padding: 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+      th { background: #f0f3f7; }
+      th:first-child, td:first-child { text-align: left; }
+      .increase { color: #b91c1c; }
+      .decrease { color: #0f766e; }
+      .pager { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+      .pager button { height: 34px; padding: 0 12px; width: auto; }
+      #historyHeading { scroll-margin-top: 20px; }
+      .fund-list { border: 1px solid var(--line); border-radius: 8px; }
+      .fund-option { display: flex; align-items: center; gap: 12px; margin: 0; padding: 10px 12px; cursor: pointer; }
+      .fund-option + .fund-option { border-top: 1px solid var(--line); }
+      .fund-option:has(:checked) { background: #e7f0fa; }
+      .fund-option input { width: auto; height: auto; margin: 0; }
+      .fund-option strong { font-variant-numeric: tabular-nums; }
+      @media (max-width: 760px) { .history-form { grid-template-columns: 1fr; } }
     </style>
   </head>
   <body>
-    <main>
       <header>
-        <h1>上交所 ETF 份额查询</h1>
-        <p class="subtitle">查询和汇总上海证券交易所披露的 ETF 当日清算后总份额。</p>
+        <h1>上交所 ETF 份额查询与历史分析</h1>
+        <p class="subtitle" style="color: #e2ecf5">查看上海证券交易所披露的 ETF 份额与历史变化。</p>
       </header>
+    <main>
 
       <div class="layout">
         <section class="panel">
@@ -231,7 +254,7 @@
             <button id="submitBtn" type="submit">查询</button>
           </form>
 
-          <div id="message" class="message"></div>
+          <div id="message" class="message" role="status"></div>
 
           <div id="result" class="result">
             <div class="result-grid">
@@ -252,7 +275,51 @@
         </section>
 
         <section class="panel">
-          <h2>数据汇总</h2>
+          <h2 id="historyHeading" tabindex="-1">历史份额分析</h2>
+          <form id="historyForm" class="history-form">
+            <div>
+              <label for="historyCode">本地 ETF 代码</label>
+              <input id="historyCode" name="code" list="localCodes" inputmode="numeric"
+                     pattern="[0-9]{6}" maxlength="6" value="510050" required>
+              <datalist id="localCodes"></datalist>
+            </div>
+            <div>
+              <label for="historyStart">起始日期</label>
+              <input id="historyStart" name="start" type="date" value="{{ default_start_date }}" required>
+            </div>
+            <div>
+              <label for="historyEnd">终止日期</label>
+              <input id="historyEnd" name="end" type="date" value="{{ default_end_date }}" required>
+            </div>
+            <button type="submit">查看分析</button>
+          </form>
+          <p id="catalogStatus" class="history-note"></p>
+          <p id="historyStatus" role="status"></p>
+          <div id="historyResult" hidden>
+            <div class="result-grid">
+              <div class="field"><span>最新份额（万份）</span><strong id="latestShares"></strong></div>
+              <div class="field"><span>区间份额变化（万份）</span><strong id="periodChange"></strong></div>
+              <div class="field"><span>区间记录数</span><strong id="historyCount"></strong></div>
+            </div>
+            <svg id="shareChart" class="chart" viewBox="0 0 800 280" role="img" aria-label="历史总份额折线图"></svg>
+            <p class="history-note">份额变化为本条与上一条本地记录之差。缺失日期不补值。</p>
+            <div class="table-wrap">
+              <table aria-label="历史份额明细">
+                <thead><tr><th scope="col">日期</th><th scope="col">总份额（万份）</th><th scope="col">较上一条变化（万份）</th></tr></thead>
+                <tbody id="historyRows"></tbody>
+              </table>
+            </div>
+            <div class="pager">
+              <button id="previousPage" type="button">上一页</button>
+              <span id="pageStatus" aria-live="polite"></span>
+              <button id="nextPage" type="button">下一页</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>ETF 数据汇总与更新</h2>
+          <p class="history-note">按日期更新全部上交所 ETF。已完成全量更新的日期会自动跳过。</p>
           <form id="updateForm">
             <div>
               <label for="start">起始日期</label>
@@ -265,7 +332,7 @@
             <button id="updateBtn" type="submit">数据更新</button>
           </form>
 
-          <div id="updateMessage" class="message"></div>
+          <div id="updateMessage" class="message" role="status"></div>
           <div id="updateResult" class="result">
             <div class="result-grid">
               <div class="field">
@@ -291,6 +358,19 @@
           上海证券交易所 ETF规模
         </a>
       </p>
+      <section class="panel" aria-labelledby="fundCatalogHeading">
+        <h2 id="fundCatalogHeading">本地基金清单</h2>
+        <label for="fundSearch">搜索基金代码或名称</label>
+        <input id="fundSearch" type="search" autocomplete="off">
+        <p id="fundStatus" class="history-note" role="status">正在读取本地基金清单…</p>
+        <div id="fundList" class="fund-list" role="radiogroup" aria-label="选择一只基金" hidden></div>
+        <div class="pager">
+          <button id="previousFundPage" type="button" disabled>上一页</button>
+          <span id="fundPageStatus" aria-live="polite"></span>
+          <button id="nextFundPage" type="button" disabled>下一页</button>
+          <button id="analyzeFund" type="button" disabled>数据分析</button>
+        </div>
+      </section>
     </main>
 
     <script>
@@ -355,6 +435,8 @@
           document.querySelector("#resultDate").textContent = data.stat_date;
           document.querySelector("#volume10k").textContent = formatNumber(data.total_volume_10k);
           result.classList.add("show");
+          document.querySelector("#historyCode").value = data.code;
+          window.dispatchEvent(new Event("etf-data-updated"));
           showMessage(message, body.source === "local" ? "已从本地数据读取。" : "已从上交所查询并更新本地数据。", "info");
         } catch (error) {
           showMessage(message, "查询失败，请确认网络可访问上交所后重试。");
@@ -395,6 +477,7 @@
           document.querySelector("#savedRecordCount").textContent = formatNumber(summary.saved_record_count);
           updateResult.classList.add("show");
           showMessage(updateMessage, "数据更新完成。", "info");
+          window.dispatchEvent(new Event("etf-data-updated"));
         } catch (error) {
           showMessage(updateMessage, "更新失败，请确认网络可访问上交所后重试。");
         } finally {
@@ -403,5 +486,6 @@
         }
       });
     </script>
+    <script src="{{ url_for('static', filename='history.js') }}"></script>
   </body>
 </html>
