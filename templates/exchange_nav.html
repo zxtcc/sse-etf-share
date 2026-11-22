@@ -1,0 +1,4 @@
+<nav class="exchange-nav" aria-label="交易所导航">
+  <a href="{{ url_for('index') }}"{% if request.endpoint == 'index' %} aria-current="page"{% endif %}>上交所 ETF</a>
+  <a href="{{ url_for('szse.index') }}"{% if request.endpoint == 'szse.index' %} aria-current="page"{% endif %}>深交所 ETF</a>
+</nav>

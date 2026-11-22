@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 .exchange-header,
 .exchange-nav {
   padding-inline: max(16px, calc((100% - 1040px) / 2));
@@ -28,6 +29,12 @@
   display: flex;
   gap: 12px;
   line-height: 20px;
+=======
+.exchange-nav {
+  display: flex;
+  gap: 12px;
+  padding: 0 max(16px, calc((100% - 1040px) / 2));
+>>>>>>> origin/main
   background: #fff;
   border-bottom: 1px solid #d8dde8;
 }
