@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>深交所 ETF 份额查询与历史分析</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='exchange-nav.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+      margin: 0; background: #f4f6f9; color: #222;
+    }
+    header {
+      background: #1f4e79; color: #fff; padding: 18px 24px;
+    }
+    header h1 { margin: 0; font-size: 20px; }
+    header p { margin: 6px 0 0; font-size: 12px; opacity: .8; }
+    .container { max-width: 1000px; margin: 20px auto; padding: 0 16px; }
+    .card {
+      background: #fff; border-radius: 8px; padding: 18px 20px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 20px;
+    }
+    .card h2 { margin: 0 0 14px; font-size: 16px; color: #1f4e79; }
+    .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+    .field { display: flex; flex-direction: column; }
+    .field label { font-size: 12px; color: #666; margin-bottom: 4px; }
+    input {
+      padding: 7px 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 14px;
+    }
+    button {
+      padding: 8px 18px; border: none; border-radius: 5px; cursor: pointer;
+      background: #1f4e79; color: #fff; font-size: 14px;
+    }
+    button:hover { background: #163a5c; }
+    button:disabled { background: #9bb3c9; cursor: not-allowed; }
+    button.btn-danger { background: #c0392b; }
+    button.btn-danger:hover { background: #a5281b; }
+    .msg { margin-top: 12px; font-size: 14px; }
+    .msg.error { color: #c0392b; }
+    .msg.ok { color: #1e7e34; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
+    th, td { border: 1px solid #e3e3e3; padding: 7px 10px; text-align: right; }
+    th { background: #f0f3f7; }
+    td:first-child, th:first-child { text-align: center; }
+    .result-grid { display: flex; gap: 30px; flex-wrap: wrap; margin-top: 10px; }
+    .result-grid div b { display: block; font-size: 12px; color: #888; font-weight: normal; }
+    .result-grid div span { font-size: 20px; color: #1f4e79; }
+    .hint { font-size: 12px; color: #999; margin-top: 6px; }
+    .progress-wrap { margin-top: 12px; }
+    .progress-bar {
+      width: 100%; height: 14px; background: #eef1f5; border-radius: 7px; overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%; width: 0; background: #1f4e79; border-radius: 7px;
+      transition: width .25s ease;
+    }
+    .progress-text { font-size: 12px; color: #555; margin-top: 6px; }
+    .table-bar {
+      display: flex; align-items: center; gap: 16px;
+      margin: 16px 0 8px; font-size: 13px; color: #555;
+    }
+    .table-bar select {
+      padding: 4px 8px; border: 1px solid #ccc; border-radius: 5px; font-size: 13px;
+    }
+    .table-info { color: #888; }
+    .pager {
+      display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+      margin-top: 12px;
+    }
+    .page-btn {
+      min-width: 34px; padding: 5px 10px; font-size: 13px;
+      background: #fff; color: #1f4e79; border: 1px solid #cdd7e2; border-radius: 5px;
+    }
+    .page-btn:hover:not(:disabled):not(.active) { background: #eef2f7; }
+    .page-btn.active { background: #1f4e79; color: #fff; border-color: #1f4e79; cursor: default; }
+    .page-btn:disabled { color: #bbb; cursor: not-allowed; }
+    .page-ellipsis { color: #aaa; padding: 0 2px; }
+    .drag-handle { cursor: grab; color: #b0b0b0; text-align: center; user-select: none; }
+    .drag-handle:active { cursor: grabbing; }
+    tr.dragging { opacity: .4; }
+    tr.drag-over td { border-top: 2px solid #1f4e79; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>深交所 ETF 份额查询与历史分析</h1>
+    <p>数据来源：深圳证券交易所 ETF 份额页面（www.szse.cn）</p>
+  </header>
+  {% include "exchange_nav.html" %}
+
+  <div class="container">
+    <!-- 单日查询 -->
+    <div class="card">
+      <h2>单日份额查询</h2>
+      <div class="row">
+        <div class="field">
+          <label>ETF 代码（6 位）</label>
+          <input id="q-code" placeholder="如 159150" value="159150" />
+        </div>
+        <div class="field">
+          <label>日期</label>
+          <input id="q-date" type="date" />
+        </div>
+        <button id="q-btn" onclick="doQuery()">查询</button>
+      </div>
+      <div id="q-msg" class="msg"></div>
+      <div id="q-result" class="result-grid"></div>
+    </div>
+
+    <!-- 历史分析 -->
+    <div class="card">
+      <h2>历史份额分析</h2>
+      <div class="row">
+        <div class="field">
+          <label>ETF 代码（6 位）</label>
+          <input id="h-code" placeholder="如 159150" value="159150" />
+        </div>
+        <div class="field">
+          <label>开始日期</label>
+          <input id="h-start" type="date" />
+        </div>
+        <div class="field">
+          <label>结束日期</label>
+          <input id="h-end" type="date" />
+        </div>
+        <button id="b-btn" onclick="doBackfill()">批量回填区间</button>
+        <button id="h-btn" onclick="loadHistory()">历史数据分析</button>
+      </div>
+      <div class="hint">批量回填按 180 天分段抓取深交所数据并存入 data/代码.xlsx；已抓取过的日期会自动跳过，非交易日自动忽略；每段请求间有随机间隔以避免被反爬，耗时与天数相关。</div>
+      <div id="h-msg" class="msg"></div>
+      <div id="h-progress" class="progress-wrap" style="display:none;">
+        <div class="progress-bar"><div id="h-progress-fill" class="progress-fill"></div></div>
+        <div id="h-progress-text" class="progress-text"></div>
+      </div>
+      <canvas id="chart" height="110" style="margin-top:16px;"></canvas>
+      <div id="h-table-bar" class="table-bar" style="display:none;">
+        <label>每页
+          <select id="h-pagesize">
+            <option value="20" selected>20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="0">全部</option>
+          </select>
+          条
+        </label>
+        <span id="h-table-info" class="table-info"></span>
+      </div>
+      <div id="h-table"></div>
+      <div id="h-pager" class="pager"></div>
+    </div>
+
+    <!-- ETF 数据汇总 -->
+    <div class="card">
+      <h2>ETF 数据汇总</h2>
+      <div class="row">
+        <button id="s-btn" onclick="loadSummary()">刷新汇总</button>
+        <button id="s-update-btn" onclick="updateSelected()">更新数据</button>
+        <button id="s-del-btn" class="btn-danger" onclick="deleteSelected()">删除</button>
+      </div>
+      <div class="hint">列出本地已存储数据的所有 ETF（代码、中文名称）及各自数据覆盖的时间段（数据来自 data/代码.xlsx）。勾选后可「更新数据」（增量补到最近交易日）或「删除」（连同 data 下文件一并删除）；点击「查看分析」可在上方查看该 ETF。</div>
+      <div id="s-msg" class="msg"></div>
+      <div id="s-progress" class="progress-wrap" style="display:none;">
+        <div class="progress-bar"><div id="s-progress-fill" class="progress-fill"></div></div>
+        <div id="s-progress-text" class="progress-text"></div>
+      </div>
+      <div id="s-table"></div>
+    </div>
+  </div>
+
+  <script>
+    let chart = null;
+    // 历史数据分页状态
+    let historyData = [];   // 当前加载的全部历史记录
+    let curPage = 1;        // 当前页码（从 1 开始）
+    let summaryData = [];   // ETF 数据汇总当前顺序
+
+    // 返回最近一个非周末日期（今天若为工作日则取今天，否则回退到上一个周五），格式 YYYY-MM-DD
+    function lastWeekday() {
+      const d = new Date();
+      while (d.getDay() === 0 || d.getDay() === 6) {
+        d.setDate(d.getDate() - 1);
+      }
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    }
+
+    // 页面加载时初始化日期默认值
+    function initDefaults() {
+      const recent = lastWeekday();
+      document.getElementById("q-date").value = recent;      // 单日查询：最近非周末
+      document.getElementById("h-start").value = "2023-01-02"; // 历史开始：固定 2023-01-02
+      document.getElementById("h-end").value = recent;        // 历史结束：最近非周末
+    }
+    window.addEventListener("DOMContentLoaded", () => {
+      initDefaults();
+      loadSummary();  // 进入页面即展示已存储 ETF 汇总
+    });
+
+    function fmt(n) {
+      if (n === null || n === undefined) return "-";
+      return Number(n).toLocaleString();
+    }
+
+    async function doQuery() {
+      const code = document.getElementById("q-code").value.trim();
+      const date = document.getElementById("q-date").value.trim();
+      const btn = document.getElementById("q-btn");
+      const msg = document.getElementById("q-msg");
+      const result = document.getElementById("q-result");
+      msg.className = "msg"; msg.textContent = "查询中…";
+      result.innerHTML = "";
+      btn.disabled = true;
+      try {
+        const resp = await fetch({{ url_for("szse.api_query") | tojson }}, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code, date }),
+        });
+        const j = await resp.json();
+        if (!j.ok) {
+          msg.className = "msg error"; msg.textContent = j.msg;
+        } else {
+          const d = j.data;
+          msg.className = "msg ok"; msg.textContent = "查询成功，数据已保存。";
+          result.innerHTML =
+            `<div><b>名称</b><span>${d.名称 || "-"}</span></div>` +
+            `<div><b>代码</b><span>${d.代码}</span></div>` +
+            `<div><b>日期</b><span>${d.日期}</span></div>` +
+            `<div><b>份额（万份）</b><span>${fmt(d.份额)}</span></div>`;
+        }
+      } catch (e) {
+        msg.className = "msg error"; msg.textContent = "请求出错：" + e;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function setProgress(done, total, label) {
+      const wrap = document.getElementById("h-progress");
+      const fill = document.getElementById("h-progress-fill");
+      const text = document.getElementById("h-progress-text");
+      wrap.style.display = "block";
+      const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+      fill.style.width = pct + "%";
+      text.textContent = label;
+    }
+
+    function doBackfill() {
+      const code = document.getElementById("h-code").value.trim();
+      const start = document.getElementById("h-start").value.trim();
+      const end = document.getElementById("h-end").value.trim();
+      const btn = document.getElementById("b-btn");
+      const msg = document.getElementById("h-msg");
+      msg.className = "msg"; msg.textContent = "正在准备回填…";
+      btn.disabled = true;
+      setProgress(0, 1, "正在检查已有数据…");
+
+      const url =
+        {{ url_for("szse.api_backfill_stream") | tojson }} + "?code=" + encodeURIComponent(code) +
+        "&start=" + encodeURIComponent(start) +
+        "&end=" + encodeURIComponent(end);
+      const es = new EventSource(url);
+
+      es.onmessage = (e) => {
+        const ev = JSON.parse(e.data);
+        if (ev.type === "error") {
+          msg.className = "msg error"; msg.textContent = ev.msg;
+          document.getElementById("h-progress").style.display = "none";
+          es.close(); btn.disabled = false;
+        } else if (ev.type === "start") {
+          if (ev.待抓取窗口数 === 0) {
+            setProgress(1, 1, "已有数据可覆盖该区间，无需请求深交所。");
+          } else {
+            setProgress(0, ev.待抓取窗口数,
+              `已存在 ${ev.已存在天数} 天，需抓取 ${ev.待抓取窗口数} 个时间段…`);
+          }
+        } else if (ev.type === "progress") {
+          setProgress(ev.当前窗口, ev.总窗口数,
+            `进度 ${ev.当前窗口}/${ev.总窗口数} 段　本段 ${ev.窗口区间[0]} ~ ${ev.窗口区间[1]}　` +
+            `本段交易日 ${ev.本窗口交易日}，累计新抓取 ${ev.累计新抓取} 天`);
+        } else if (ev.type === "done") {
+          setProgress(1, 1, "完成");
+          msg.className = "msg ok";
+          msg.textContent =
+            `${ev.msg}：新增 ${ev.新增交易日数} 个交易日，文件共 ${ev.文件总记录数} 条。`;
+          es.close(); btn.disabled = false;
+          loadHistory();
+        }
+      };
+
+      es.onerror = () => {
+        // 连接异常关闭（done 后浏览器也会触发，此处仅在未完成时提示）
+        if (btn.disabled) {
+          msg.className = "msg error";
+          msg.textContent = "连接中断，请重试。";
+          es.close(); btn.disabled = false;
+        }
+      };
+    }
+
+    async function loadHistory() {
+      const code = document.getElementById("h-code").value.trim();
+      const start = document.getElementById("h-start").value.trim();
+      const end = document.getElementById("h-end").value.trim();
+      const msg = document.getElementById("h-msg");
+      const tableDiv = document.getElementById("h-table");
+      const bar = document.getElementById("h-table-bar");
+      const pager = document.getElementById("h-pager");
+      try {
+        const url = {{ url_for("szse.api_history") | tojson }} + "?code=" + encodeURIComponent(code) +
+          (start ? "&start=" + encodeURIComponent(start) : "") +
+          (end ? "&end=" + encodeURIComponent(end) : "");
+        const resp = await fetch(url);
+        const j = await resp.json();
+        if (!j.ok) {
+          msg.className = "msg error"; msg.textContent = j.msg;
+          return;
+        }
+        const rangeText = (start || end) ? `（${start || "最早"} ~ ${end || "最新"}）` : "";
+        if (j.count === 0) {
+          msg.className = "msg";
+          msg.textContent = `该区间${rangeText}暂无数据，请调整时间区间，或先用「批量回填区间」/「单日查询」采集数据。`;
+          if (chart) { chart.destroy(); chart = null; }
+          historyData = [];
+          tableDiv.innerHTML = ""; pager.innerHTML = ""; bar.style.display = "none";
+          return;
+        }
+        msg.className = "msg ok";
+        msg.textContent = `已加载 ${j.name || code}${rangeText} 共 ${j.count} 条记录。`;
+        renderChart(j.data, j.name || code);
+        // 进入分页展示
+        historyData = j.data;
+        curPage = 1;
+        bar.style.display = "flex";
+        document.getElementById("h-pagesize").onchange = () => { curPage = 1; renderTablePage(); };
+        renderTablePage();
+      } catch (e) {
+        msg.className = "msg error"; msg.textContent = "请求出错：" + e;
+      }
+    }
+
+    // 跳转到指定页（供页码按钮调用）
+    function gotoPage(p) { curPage = p; renderTablePage(); }
+
+    // 按当前页码与每页条数渲染表格 + 分页控件
+    function renderTablePage() {
+      const total = historyData.length;
+      const size = parseInt(document.getElementById("h-pagesize").value, 10); // 0 表示全部
+      const pageCount = size === 0 ? 1 : Math.max(1, Math.ceil(total / size));
+      if (curPage > pageCount) curPage = pageCount;
+      if (curPage < 1) curPage = 1;
+
+      const start = size === 0 ? 0 : (curPage - 1) * size;
+      const end = size === 0 ? total : Math.min(start + size, total);
+      // 表格按时间倒序展示（最近的在最上方），图表仍保持升序
+      const desc = historyData.slice().reverse();
+      renderTable(desc.slice(start, end));
+
+      document.getElementById("h-table-info").textContent =
+        `共 ${total} 条　第 ${curPage}/${pageCount} 页　显示第 ${total ? start + 1 : 0}-${end} 条`;
+      renderPager(pageCount);
+    }
+
+    // 渲染分页按钮（带首末页与省略号）
+    function renderPager(pageCount) {
+      const pager = document.getElementById("h-pager");
+      if (pageCount <= 1) { pager.innerHTML = ""; return; }
+      const btn = (label, page, disabled, active) =>
+        `<button class="page-btn${active ? " active" : ""}" ${disabled ? "disabled" : ""} ` +
+        `onclick="gotoPage(${page})">${label}</button>`;
+      let html = btn("上一页", curPage - 1, curPage <= 1, false);
+      const win = 2;
+      let from = Math.max(1, curPage - win);
+      let to = Math.min(pageCount, curPage + win);
+      if (from > 1) {
+        html += btn("1", 1, false, curPage === 1);
+        if (from > 2) html += '<span class="page-ellipsis">…</span>';
+      }
+      for (let p = from; p <= to; p++) html += btn(String(p), p, false, p === curPage);
+      if (to < pageCount) {
+        if (to < pageCount - 1) html += '<span class="page-ellipsis">…</span>';
+        html += btn(String(pageCount), pageCount, false, curPage === pageCount);
+      }
+      html += btn("下一页", curPage + 1, curPage >= pageCount, false);
+      pager.innerHTML = html;
+    }
+
+    function renderChart(data, name) {
+      const labels = data.map((r) => r.日期);
+      const shares = data.map((r) => r.份额);
+      if (chart) chart.destroy();
+      chart = new Chart(document.getElementById("chart"), {
+        type: "line",
+        data: {
+          labels,
+          datasets: [{
+            label: name + " 逐日份额（万份）",
+            data: shares,
+            borderColor: "#1f4e79",
+            backgroundColor: "rgba(31,78,121,.1)",
+            fill: true,
+            tension: 0.2,
+            pointRadius: 3,
+          }],
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: true } },
+          scales: { y: { ticks: { callback: (v) => Number(v).toLocaleString() } } },
+        },
+      });
+    }
+
+    // 格式化「当日变动」：带正负号与颜色（涨红跌绿，符合 A 股习惯）
+    function fmtChange(n) {
+      if (n === null || n === undefined) return "-";
+      const v = Number(n);
+      const text = (v > 0 ? "+" : "") + v.toLocaleString();
+      const color = v > 0 ? "#c0392b" : (v < 0 ? "#1e7e34" : "#888");
+      return `<span style="color:${color}">${text}</span>`;
+    }
+
+    function renderTable(data) {
+      let html = "<table><thead><tr><th>日期</th><th>名称</th>" +
+        "<th>份额（万份）</th><th>当日变动份额（万份）</th></tr></thead><tbody>";
+      for (const r of data) {
+        html +=
+          `<tr><td>${r.日期}</td><td>${r.名称 || "-"}</td>` +
+          `<td>${fmt(r.份额)}</td><td>${fmtChange(r.当日变动)}</td></tr>`;
+      }
+      html += "</tbody></table>";
+      document.getElementById("h-table").innerHTML = html;
+    }
+
+    // ETF 数据汇总：列出本地已存储的所有 ETF 及其数据时间段
+    async function loadSummary() {
+      const msg = document.getElementById("s-msg");
+      const tableDiv = document.getElementById("s-table");
+      msg.className = "msg"; msg.textContent = "加载中…";
+      try {
+        const resp = await fetch({{ url_for("szse.api_summary") | tojson }});
+        const j = await resp.json();
+        if (!j.ok) { msg.className = "msg error"; msg.textContent = j.msg || "加载失败"; return; }
+        if (!j.data.length) {
+          msg.className = "msg";
+          msg.textContent = "暂无已存储的 ETF 数据，请先用「单日查询」或「批量回填区间」采集。";
+          tableDiv.innerHTML = "";
+          return;
+        }
+        msg.className = "msg ok";
+        msg.textContent = `本地已存储 ${j.data.length} 只 ETF 的数据。拖动每行最左侧的 ⠿ 可调整顺序。`;
+        summaryData = j.data;
+        renderSummaryTable();
+      } catch (e) {
+        msg.className = "msg error"; msg.textContent = "请求出错：" + e;
+      }
+    }
+
+    // 根据 summaryData 渲染汇总表（行可拖动排序）
+    function renderSummaryTable() {
+      const tableDiv = document.getElementById("s-table");
+      if (!summaryData.length) { tableDiv.innerHTML = ""; return; }
+      let html = "<table><thead><tr><th></th>" +
+        '<th><input type="checkbox" id="s-check-all" onclick="toggleAllChecks(this)"></th>' +
+        "<th>代码</th><th>名称</th><th>数据起始</th>" +
+        "<th>数据结束</th><th>记录数</th><th>操作</th></tr></thead><tbody>";
+      summaryData.forEach((r, i) => {
+        html +=
+          `<tr draggable="true" data-index="${i}" ondragstart="onRowDragStart(event,${i})" ` +
+          `ondragover="onRowDragOver(event)" ondragleave="onRowDragLeave(event)" ` +
+          `ondrop="onRowDrop(event,${i})" ondragend="onRowDragEnd(event)">` +
+          `<td class="drag-handle" title="拖动调整顺序">⠿</td>` +
+          `<td><input type="checkbox" class="s-check" value="${r.代码}"></td>` +
+          `<td>${r.代码}</td><td>${r.名称 || "-"}</td><td>${r.开始日期}</td>` +
+          `<td>${r.结束日期}</td><td>${fmt(r.记录数)}</td>` +
+          `<td><button class="page-btn" onclick="analyzeEtf('${r.代码}')">查看分析</button></td></tr>`;
+      });
+      html += "</tbody></table>";
+      tableDiv.innerHTML = html;
+    }
+
+    let dragIndex = null;
+    function onRowDragStart(e, i) {
+      dragIndex = i;
+      e.currentTarget.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+    }
+    function onRowDragOver(e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      e.currentTarget.classList.add("drag-over");
+    }
+    function onRowDragLeave(e) { e.currentTarget.classList.remove("drag-over"); }
+    function onRowDragEnd() {
+      document.querySelectorAll("#s-table tr").forEach((tr) =>
+        tr.classList.remove("dragging", "drag-over"));
+    }
+    function onRowDrop(e, targetIndex) {
+      e.preventDefault();
+      document.querySelectorAll("#s-table tr").forEach((tr) => tr.classList.remove("drag-over"));
+      if (dragIndex === null || dragIndex === targetIndex) return;
+      const [moved] = summaryData.splice(dragIndex, 1);
+      summaryData.splice(targetIndex, 0, moved);
+      dragIndex = null;
+      renderSummaryTable();
+      saveOrder();
+    }
+
+    // 把当前顺序持久化到后端
+    async function saveOrder() {
+      const codes = summaryData.map((r) => r.代码);
+      const msg = document.getElementById("s-msg");
+      try {
+        await fetch({{ url_for("szse.api_order") | tojson }}, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ codes }),
+        });
+        msg.className = "msg ok"; msg.textContent = "排序已保存。";
+      } catch (e) {
+        msg.className = "msg error"; msg.textContent = "排序保存失败：" + e;
+      }
+    }
+
+    // 全选/取消全选
+    function toggleAllChecks(box) {
+      document.querySelectorAll(".s-check").forEach((c) => { c.checked = box.checked; });
+    }
+
+    // 取得汇总表中勾选的 ETF 代码
+    function getCheckedCodes() {
+      return Array.from(document.querySelectorAll(".s-check:checked")).map((c) => c.value);
+    }
+
+    function setSummaryBtns(disabled) {
+      ["s-btn", "s-update-btn", "s-del-btn"].forEach((id) => {
+        document.getElementById(id).disabled = disabled;
+      });
+    }
+
+    // 删除选中 ETF 的全部数据（含 data 下文件）
+    async function deleteSelected() {
+      const codes = getCheckedCodes();
+      const msg = document.getElementById("s-msg");
+      if (!codes.length) { msg.className = "msg error"; msg.textContent = "请先勾选要删除的 ETF。"; return; }
+      if (!confirm(`确定删除选中的 ${codes.length} 只 ETF 的全部数据吗？此操作会删除 data 下对应文件，且不可恢复。`)) return;
+      msg.className = "msg"; msg.textContent = "删除中…"; setSummaryBtns(true);
+      try {
+        const resp = await fetch({{ url_for("szse.api_delete") | tojson }}, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ codes }),
+        });
+        const j = await resp.json();
+        msg.className = j.ok ? "msg ok" : "msg error";
+        msg.textContent = j.msg || (j.ok ? "删除完成" : "删除失败");
+        if (j.ok) loadSummary();
+      } catch (e) {
+        msg.className = "msg error"; msg.textContent = "请求出错：" + e;
+      } finally {
+        setSummaryBtns(false);
+      }
+    }
+
+    // 将选中 ETF 增量更新到最近一个交易日（SSE 实时进度）
+    function updateSelected() {
+      const codes = getCheckedCodes();
+      const msg = document.getElementById("s-msg");
+      if (!codes.length) { msg.className = "msg error"; msg.textContent = "请先勾选要更新的 ETF。"; return; }
+      setSummaryBtns(true);
+
+      const total = codes.length;
+      let completed = 0;            // 已完成的 ETF 数
+      const results = [];           // 各 ETF 结果文字
+      const nameOf = {};
+      summaryData.forEach((r) => { nameOf[r.代码] = r.名称; });
+
+      const prog = document.getElementById("s-progress");
+      const fill = document.getElementById("s-progress-fill");
+      const text = document.getElementById("s-progress-text");
+      prog.style.display = "block"; fill.style.width = "0%";
+      msg.className = "msg"; msg.textContent = `开始更新 ${total} 只 ETF…`;
+
+      // 总进度 = (已完成 ETF 数 + 当前 ETF 内部窗口完成比例) / 总 ETF 数
+      const setOverall = (winFrac) => {
+        const pct = Math.round(((completed + winFrac) / total) * 100);
+        fill.style.width = Math.min(100, Math.max(0, pct)) + "%";
+      };
+      const label = (ev, tail) =>
+        `总进度 ${ev.etf_index}/${ev.etf_total}　当前：${ev.code} ${nameOf[ev.code] || ""}　${tail}`;
+
+      const es = new EventSource({{ url_for("szse.api_update_stream") | tojson }} + "?codes=" + encodeURIComponent(codes.join(",")));
+      es.onmessage = (e) => {
+        const ev = JSON.parse(e.data);
+        if (ev.type === "error") {
+          msg.className = "msg error"; msg.textContent = ev.msg;
+          es.close(); setSummaryBtns(false); prog.style.display = "none";
+        } else if (ev.type === "etf_start") {
+          text.textContent = label(ev, "准备中…");
+          setOverall(0);
+        } else if (ev.type === "etf_meta") {
+          text.textContent = ev.total_windows === 0
+            ? label(ev, "已是最新")
+            : label(ev, `本 ETF 0/${ev.total_windows} 段`);
+        } else if (ev.type === "etf_progress") {
+          const frac = ev.total_windows ? ev.win / ev.total_windows : 0;
+          text.textContent = label(ev, `本 ETF ${ev.win}/${ev.total_windows} 段`);
+          setOverall(frac);
+        } else if (ev.type === "etf_done") {
+          completed++; setOverall(0);
+          results.push(`${ev.code} +${ev.新增交易日数}天`);
+        } else if (ev.type === "etf_error") {
+          completed++; setOverall(0);
+          results.push(`${ev.code} 失败(${ev.msg})`);
+        } else if (ev.type === "all_done") {
+          fill.style.width = "100%";
+          msg.className = "msg ok";
+          msg.textContent = `已更新至 ${ev.更新至}：` + results.join("，");
+          es.close(); setSummaryBtns(false);
+          loadSummary();
+          setTimeout(() => { prog.style.display = "none"; }, 2000);
+        }
+      };
+      es.onerror = () => {
+        if (document.getElementById("s-update-btn").disabled) {
+          msg.className = "msg error"; msg.textContent = "连接中断，请重试。";
+          es.close(); setSummaryBtns(false); prog.style.display = "none";
+        }
+      };
+    }
+
+    // 从汇总表跳转到「历史份额分析」并加载该 ETF
+    function analyzeEtf(code) {
+      const input = document.getElementById("h-code");
+      input.value = code;
+      loadHistory();
+      document.querySelector("#h-msg").scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  </script>
+</body>
+</html>

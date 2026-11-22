@@ -14,10 +14,12 @@ from openpyxl import Workbook, load_workbook
 from sse_client import EtfShare, validate_code, validate_date
 
 
-DATA_DIR = Path("data")
+DATA_DIR = Path(__file__).resolve().parent / "data"
 STATUS_FILE = DATA_DIR / "_update_status.json"
 CATALOG_FILENAME = "_fund_catalog.json"
+FAVORITES_FILENAME = "_favorites.json"
 _catalog_lock = Lock()
+_favorites_lock = Lock()
 HEADERS = [
     "日期",
     "ETF代码",
@@ -91,8 +93,12 @@ def local_funds(codes: List[str]) -> List[Dict[str, str]]:
 
 
 def _load_catalog_names() -> Dict[str, str]:
+    return _read_name_map(CATALOG_FILENAME)
+
+
+def _read_name_map(filename: str) -> Dict[str, str]:
     try:
-        return json.loads((DATA_DIR / CATALOG_FILENAME).read_text(encoding="utf-8"))
+        return json.loads((DATA_DIR / filename).read_text(encoding="utf-8"))
     except FileNotFoundError:
         return {}
 
@@ -103,15 +109,37 @@ def _save_catalog_names(updates: Dict[str, str]) -> None:
         if all(names.get(code) == name for code, name in updates.items()):
             return
         names.update(updates)
-        with NamedTemporaryFile(mode="w", encoding="utf-8", dir=DATA_DIR, delete=False) as file:
-            temporary = Path(file.name)
-            try:
-                json.dump(names, file, ensure_ascii=False, sort_keys=True, indent=2)
-                file.write("\n")
-                file.close()
-                temporary.replace(DATA_DIR / CATALOG_FILENAME)
-            finally:
-                temporary.unlink(missing_ok=True)
+        _write_name_map(CATALOG_FILENAME, names)
+
+
+def _write_name_map(filename: str, names: Dict[str, str]) -> None:
+    ensure_data_dir()
+    with NamedTemporaryFile(mode="w", encoding="utf-8", dir=DATA_DIR, delete=False) as file:
+        temporary = Path(file.name)
+        try:
+            json.dump(names, file, ensure_ascii=False, indent=2)
+            file.write("\n")
+            file.close()
+            temporary.replace(DATA_DIR / filename)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+
+def load_favorites() -> Dict[str, str]:
+    return _read_name_map(FAVORITES_FILENAME)
+
+
+def set_favorite(code: str, enabled: bool) -> Dict[str, str]:
+    with _favorites_lock:
+        favorites = load_favorites()
+        if enabled:
+            if not etf_file_path(code).is_file():
+                raise FileNotFoundError(code)
+            favorites[code] = _load_catalog_names().get(code) or favorites.get(code, "")
+        else:
+            favorites.pop(code, None)
+        _write_name_map(FAVORITES_FILENAME, favorites)
+        return favorites
 
 
 def load_history(code: str, start: str, end: str) -> List[Dict[str, object]]:

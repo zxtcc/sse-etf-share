@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>上交所 ETF 份额查询与历史分析</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='exchange-nav.css') }}">
     <style>
       :root {
         color-scheme: light;
@@ -213,6 +214,20 @@
       .history-note { color: var(--muted); font-size: 13px; line-height: 1.6; }
       .chart { display: block; width: 100%; height: auto; margin: 14px 0; }
       .chart text { fill: var(--muted); font: 14px system-ui, sans-serif; }
+      .chart-wrap { position: relative; }
+      .chart-tooltip {
+        position: absolute;
+        z-index: 1;
+        padding: 8px 10px;
+        border-radius: 6px;
+        background: #18283a;
+        color: #fff;
+        font-size: 13px;
+        line-height: 1.5;
+        pointer-events: none;
+        white-space: nowrap;
+      }
+      .chart-tooltip strong { display: block; }
       .table-wrap { overflow-x: auto; }
       table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
       th, td { padding: 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
@@ -229,6 +244,14 @@
       .fund-option:has(:checked) { background: #e7f0fa; }
       .fund-option input { width: auto; height: auto; margin: 0; }
       .fund-option strong { font-variant-numeric: tabular-nums; }
+      .favorite-funds { margin-bottom: 20px; }
+      .favorite-funds h3 { margin: 0; font-size: 16px; }
+      .favorite-list { list-style: none; padding: 0; margin: 8px 0 0; }
+      .favorite-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; }
+      .favorite-list li + li { border-top: 1px solid var(--line); }
+      .favorite-list span { flex: 1 1 160px; overflow-wrap: anywhere; }
+      .favorite-list button { width: auto; height: 34px; padding: 0 12px; }
+      .favorite-list button.remove-favorite { color: #34475d; background: #eef2f7; }
       @media (max-width: 760px) { .history-form { grid-template-columns: 1fr; } }
     </style>
   </head>
@@ -237,6 +260,7 @@
         <h1>上交所 ETF 份额查询与历史分析</h1>
         <p class="subtitle" style="color: #e2ecf5">查看上海证券交易所披露的 ETF 份额与历史变化。</p>
       </header>
+    {% include "exchange_nav.html" %}
     <main>
 
       <div class="layout">
@@ -301,7 +325,13 @@
               <div class="field"><span>区间份额变化（万份）</span><strong id="periodChange"></strong></div>
               <div class="field"><span>区间记录数</span><strong id="historyCount"></strong></div>
             </div>
-            <svg id="shareChart" class="chart" viewBox="0 0 800 280" role="img" aria-label="历史总份额折线图"></svg>
+            <div id="shareChartWrap" class="chart-wrap">
+              <svg id="shareChart" class="chart" viewBox="0 0 800 280" role="img" aria-label="历史总份额折线图"></svg>
+              <div id="shareChartTooltip" class="chart-tooltip" hidden>
+                <strong id="shareChartTooltipDate"></strong>
+                <span id="shareChartTooltipValue"></span>
+              </div>
+            </div>
             <p class="history-note">份额变化为本条与上一条本地记录之差。缺失日期不补值。</p>
             <div class="table-wrap">
               <table aria-label="历史份额明细">
@@ -360,6 +390,12 @@
       </p>
       <section class="panel" aria-labelledby="fundCatalogHeading">
         <h2 id="fundCatalogHeading">本地基金清单</h2>
+        <section class="favorite-funds" aria-labelledby="favoriteHeading">
+          <h3 id="favoriteHeading">收藏的基金</h3>
+          <p id="favoriteEmpty" class="history-note" hidden>暂无收藏。选中下方基金后，点击「收藏基金」。</p>
+          <ul id="favoriteList" class="favorite-list fund-list" hidden></ul>
+          <p id="favoriteStatus" class="history-note" role="status" hidden></p>
+        </section>
         <label for="fundSearch">搜索基金代码或名称</label>
         <input id="fundSearch" type="search" autocomplete="off">
         <p id="fundStatus" class="history-note" role="status">正在读取本地基金清单…</p>
@@ -369,6 +405,7 @@
           <span id="fundPageStatus" aria-live="polite"></span>
           <button id="nextFundPage" type="button" disabled>下一页</button>
           <button id="analyzeFund" type="button" disabled>数据分析</button>
+          <button id="toggleFavorite" type="button" disabled>收藏基金</button>
         </div>
       </section>
     </main>

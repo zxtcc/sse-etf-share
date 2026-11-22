@@ -1,0 +1,26 @@
+.exchange-nav {
+  display: flex;
+  gap: 12px;
+  padding: 0 max(16px, calc((100% - 1040px) / 2));
+  background: #fff;
+  border-bottom: 1px solid #d8dde8;
+}
+
+.exchange-nav a {
+  padding: 13px 12px 11px;
+  border-bottom: 3px solid transparent;
+  color: #34475d;
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.exchange-nav a:hover,
+.exchange-nav a[aria-current="page"] {
+  background: #eef4fa;
+  color: #1f4e79;
+}
+
+.exchange-nav a[aria-current="page"] {
+  border-bottom-color: #1f4e79;
+  font-weight: 700;
+}
