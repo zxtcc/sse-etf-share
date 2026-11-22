@@ -1,3 +1,7 @@
+<header class="exchange-header">
+  <h1>ETF 份额查询与历史分析</h1>
+  <p>数据来源：{{ '深圳' if request.endpoint == 'szse.index' else '上海' }}证券交易所</p>
+</header>
 <nav class="exchange-nav" aria-label="交易所导航">
   <a href="{{ url_for('index') }}"{% if request.endpoint == 'index' %} aria-current="page"{% endif %}>上交所 ETF</a>
   <a href="{{ url_for('szse.index') }}"{% if request.endpoint == 'szse.index' %} aria-current="page"{% endif %}>深交所 ETF</a>

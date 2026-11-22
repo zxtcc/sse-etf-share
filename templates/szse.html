@@ -12,11 +12,6 @@
       font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
       margin: 0; background: #f4f6f9; color: #222;
     }
-    header {
-      background: #1f4e79; color: #fff; padding: 18px 24px;
-    }
-    header h1 { margin: 0; font-size: 20px; }
-    header p { margin: 6px 0 0; font-size: 12px; opacity: .8; }
     .container { max-width: 1000px; margin: 20px auto; padding: 0 16px; }
     .card {
       background: #fff; border-radius: 8px; padding: 18px 20px;
@@ -84,11 +79,7 @@
   </style>
 </head>
 <body>
-  <header>
-    <h1>深交所 ETF 份额查询与历史分析</h1>
-    <p>数据来源：深圳证券交易所 ETF 份额页面（www.szse.cn）</p>
-  </header>
-  {% include "exchange_nav.html" %}
+  {% include "exchange_header.html" %}
 
   <div class="container">
     <!-- 单日查询 -->
